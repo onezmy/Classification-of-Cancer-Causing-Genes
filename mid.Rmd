@@ -1,0 +1,150 @@
+---
+title: "Untitled"
+author: "Mengyu Zhang"
+date: "11/1/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tinytex)
+library(ISLR)
+library(MASS)
+library(class)
+library(tidyverse)
+library(car)
+library(leaps)
+library(ggplot2)
+library(GGally)
+library(corrplot)
+library(nnet)
+
+```
+
+
+## Import Data
+
+```{r cars}
+# import data
+
+setwd("F:/study/Fall 2020/101C/midterm project")
+training <- read.csv("training.csv")
+test <- read.csv("test.csv")
+dim(training)
+rename_train <- read.csv("rename_train.csv")
+rename_test <- read.csv("rename_test.csv")
+
+sample <- read.csv("sample.csv")
+
+colnames(training) <- colnames(rename_train)
+colnames(test) <- colnames(rename_test)
+
+dim(rename_train)
+
+dim(rename_test)
+
+model <- multinom(class~.-id,data=training)
+
+z <- summary(model)$coefficients/summary(model)$standard.errors
+p <- (1 - pnorm(abs(z), 0, 1)) * 2
+
+p
+
+unclass(which((p[1,]<0.05)& (p[2,]<0.05)))
+
+new_train_mult_selection <- training[,c(unclass(which((p[1,]<0.05)& (p[2,]<0.05))),99)]
+
+dim(new_train_mult_selection)
+
+
+cor_mtrx <- cor(new_train_mult_selection[,1:61])
+corrplot(cor_mtrx,sig.level = 0.9, insig = "blank")
+
+```
+
+## Pre-process data
+```{r}
+# Try PCA 
+
+all_data <- data.frame(rbind(training,test))
+dim(all_data)
+Correlation_matrix <- cor(training[,2:99])
+
+Correlation_matrix[,98]
+corrplot(Correlation_matrix, method="color")
+
+corrplot(Correlation_matrix, method="circle", sig.level = 0.01, insig = "blank")
+
+head(all_data)
+
+
+all.pca <- prcomp(all_data[,2:98])
+
+colnames(training)[c(3,46,57,66,69,71,72,74,75,78,86,92,93,94,95,96,97)]
+# take first 8 PCs
+
+dim(all.pca$x[1:3177,1:8])
+train_pca <- all.pca$x[1:3177,]
+new_train <- data.frame(train_pca,class=training$class)
+dim(new_train)
+temp <- data.frame(correlation=cor(new_train[,1:97],new_train$class))
+temp[,1][order(temp$correlation)]
+order(temp$correlation)
+dim(all.pca$x[3178:4540,])
+new_test <- data.frame(all.pca$x[3178:4540,])
+head(new_test)
+
+```
+
+
+## Build model
+```{r}
+new_train <- data.frame(train_pca,class=training$class)
+
+qda <- lda(class ~ PC1+PC29+PC40+PC21^2+PC19+PC26^3+PC32
+            , data = new_train)
+
+summary(qda)
+
+pred.qda <- predict(qda, new_test)
+
+test_id <- rename_test$id
+
+qda_result <- data.frame("id"=test_id, "class"=pred.qda$class)
+
+sum(as.numeric(pred.qda$class)-1)/(dim(qda_result)[1])
+table(pred.qda$class)
+dim(sample)
+dim(qda_result)
+
+write.csv(qda_result,"try.csv",row.names = FALSE)
+
+
+test_train <- predict(qda,new_train)
+test_train <- as.numeric(test_train$class)-1
+length(test_train)
+test_class <- as.numeric(training$class)
+dim(training)
+count <- 0
+total_count <- 0
+for (i in 1:length(test_class)){
+  if(as.numeric(test_class[i]==0)){
+    total_count = total_count+1
+  }
+  else{
+    total_count = total_count+20
+  }
+}
+
+for (i in 1:length(test_class)){
+  if(test_train[i] == as.numeric(test_class[i])){
+    if(test_train[i] == 0) count=count+1
+    else{
+      count = count +20
+    }
+  }
+}
+count/total_count
+```
+
+
